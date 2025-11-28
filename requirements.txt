@@ -1,8 +1,7 @@
 streamlit
 pandas
-requests
-plotly
-scikit-learn
 numpy
-tensorflow-cpu
-keras
+tensorflow
+scikit-learn
+plotly
+requests
