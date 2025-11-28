@@ -1,0 +1,61 @@
+import streamlit as st
+import time
+from utils_api import get_live_btc_price, get_inr_rate
+from utils_charts import generate_fake_candles, get_line_chart, get_candle_chart
+
+st.set_page_config(page_title="RQC BTC Predictor", layout="wide")
+
+st.title("🚀 RQC BTC Predictor — Live Crypto App")
+st.caption("Made with ❤️ by Ravi Ganjir")
+
+# MAIN REFRESH SETTING
+refresh_rate = st.sidebar.selectbox(
+    "Auto Refresh",
+    ["None", "5 sec", "Auto (system)"]
+)
+
+candle_option = st.sidebar.selectbox(
+    "Candles",
+    ["50", "100", "200"]
+)
+candle_count = int(candle_option)
+
+# LIVE PRICE BOX
+st.subheader("📌 Live Bitcoin Price")
+
+btc_price = get_live_btc_price()
+inr_rate = get_inr_rate()
+
+if btc_price:
+    inr_price = btc_price * inr_rate
+
+    col1, col2 = st.columns(2)
+    col1.metric("BTC Price (USD)", f"{btc_price:,.2f} USD")
+    col2.metric("BTC Price (INR)", f"{inr_price:,.2f} ₹")
+else:
+    st.error("⚠ Unable to fetch price right now. Please try again.")
+
+# CHART TABS
+st.subheader("📊 BTC Price Charts")
+
+df = generate_fake_candles(btc_price if btc_price else 50000, candles=candle_count)
+
+tab1, tab2, tab3 = st.tabs(["Line Chart", "Candle Chart", "Both Charts"])
+
+with tab1:
+    st.plotly_chart(get_line_chart(df), use_container_width=True)
+
+with tab2:
+    st.plotly_chart(get_candle_chart(df), use_container_width=True)
+
+with tab3:
+    st.plotly_chart(get_line_chart(df), use_container_width=True)
+    st.plotly_chart(get_candle_chart(df), use_container_width=True)
+
+# AUTO REFRESH LOGIC
+if refresh_rate == "5 sec":
+    time.sleep(5)
+    st.rerun()
+
+elif refresh_rate == "Auto (system)":
+    st.rerun()
