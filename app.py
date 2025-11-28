@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import requests
-import plotly.graph_objects as go
+import plotly.express as px
+
 import time
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
