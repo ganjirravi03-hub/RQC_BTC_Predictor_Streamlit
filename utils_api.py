@@ -1,57 +1,20 @@
 import requests
-import streamlit as st
 
-# ========== COINBASE ==========
-@st.cache_data(ttl=10)
-def get_price_coinbase():
+def fetch_btc_price():
+    """
+    Fetch real-time BTC/USDT price from Binance API.
+    Returns float price if success, otherwise None.
+    """
     try:
-        response = requests.get("https://api.coinbase.com/v2/prices/BTC-USD/spot", timeout=5)
-        data = response.json()
-        return float(data["data"]["amount"])
-    except:
+        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+        response = requests.get(url, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            return float(data["price"])
+        else:
+            return None
+
+    except Exception:
         return None
-
-
-# ========== KRAKEN ==========
-@st.cache_data(ttl=10)
-def get_price_kraken():
-    try:
-        response = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=5)
-        data = response.json()
-        return float(data["result"]["XXBTZUSD"]["c"][0])
-    except:
-        return None
-
-
-# ========== COINGECKO ==========
-@st.cache_data(ttl=10)
-def get_price_coingecko():
-    try:
-        response = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-            timeout=5
-        )
-        data = response.json()
-        return float(data["bitcoin"]["usd"])
-    except:
-        return None
-
-
-# MAIN FUNCTION TO GET LIVE AVG PRICE
-def get_live_btc_price():
-    prices = []
-
-    coinbase = get_price_coinbase()
-    if coinbase: prices.append(coinbase)
-
-    kraken = get_price_kraken()
-    if kraken: prices.append(kraken)
-
-    coingecko = get_price_coingecko()
-    if coingecko: prices.append(coingecko)
-
-    if len(prices) == 0:
-        return None
-
-    return sum(prices) / len(prices)
-    
+        
