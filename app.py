@@ -1,8 +1,7 @@
 import streamlit as st
 import time
 from utils_api import fetch_btc_price
-import plotly.express as px  # ✅ Plotly Express import
-from utils_charts import plot_price_chart  # अगर original में chart function अलग है तो नीचे fix किया गया
+import plotly.express as px
 
 st.set_page_config(page_title="RQC BTC Predictor", layout="wide")
 
@@ -29,9 +28,10 @@ while True:
 
         with placeholder.container():
             st.subheader(f"💰 Live BTC Price: **${price:,.2f}**")
-            chart = plot_price_chart_px(prices)  # ✅ Updated chart function
+            chart = plot_price_chart_px(prices)
             st.plotly_chart(chart, use_container_width=True)
     else:
         st.error("Failed to fetch price. Trying again...")
 
-    time.sleep(3)  # हर 3 सेकंड में अपडेट
+    time.sleep(3)
+    
