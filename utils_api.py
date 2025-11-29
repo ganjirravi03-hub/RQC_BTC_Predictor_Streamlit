@@ -2,10 +2,14 @@ import requests
 
 def fetch_btc_price():
     try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-        response = requests.get(url, timeout=5)
+        url = "https://api.binance.com/api/v3/ticker/price"
+        params = {"symbol": "BTCUSDT"}
+
+        response = requests.get(url, params=params, timeout=5)
         data = response.json()
-        return float(data["bitcoin"]["usd"])
-    except:
+
+        return float(data["price"])
+    except Exception as e:
+        print("API Error:", e)
         return None
         
