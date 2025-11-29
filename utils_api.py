@@ -2,19 +2,20 @@ import requests
 
 def fetch_btc_price():
     """
-    Fetch real-time BTC/USDT price from Binance API.
-    Returns float price if success, otherwise None.
+    Fetch real-time BTC/USDT price from Binance (fastest endpoint).
     """
     try:
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-        response = requests.get(url, timeout=5)
+        url = "https://api.binance.com/api/v3/ticker/bookTicker?symbol=BTCUSDT"
+        headers = {"Cache-Control": "no-cache"}
 
-        if response.status_code == 200:
-            data = response.json()
-            return float(data["price"])
-        else:
-            return None
+        r = requests.get(url, headers=headers, timeout=5)
 
-    except Exception:
+        if r.status_code == 200:
+            data = r.json()
+            return float(data["askPrice"])   # most real-time price
+
+        return None
+
+    except:
         return None
         
