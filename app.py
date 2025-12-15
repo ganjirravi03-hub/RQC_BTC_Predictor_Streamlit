@@ -10,7 +10,7 @@ st.title("🔥 BTC Phoenix – Live Buy / Sell / Hold")
 st.write("Real-time BTC signal engine (Stable & Fast)")
 
 # -----------------------------
-# DATA FETCH (CoinGecko – No API Key)
+# SAFE DATA FETCH
 # -----------------------------
 @st.cache_data(ttl=60)
 def fetch_btc_data():
@@ -20,15 +20,28 @@ def fetch_btc_data():
         "days": "1",
         "interval": "minute"
     }
-    r = requests.get(url, params=params, timeout=10)
-    data = r.json()["prices"]
 
-    df = pd.DataFrame(data, columns=["time", "price"])
+    r = requests.get(url, params=params, timeout=10)
+    data = r.json()
+
+    # ✅ SAFETY CHECK
+    if "prices" not in data:
+        raise ValueError("API limit or temporary issue")
+
+    df = pd.DataFrame(data["prices"], columns=["time", "price"])
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
 
 # -----------------------------
-# SIGNAL LOGIC (PROFIT FRIENDLY)
+# FALLBACK DATA (ALWAYS WORKS)
+# -----------------------------
+def fallback_data():
+    prices = np.linspace(43000, 43200, 60)
+    time = pd.date_range(end=datetime.now(), periods=60, freq="min")
+    return pd.DataFrame({"time": time, "price": prices})
+
+# -----------------------------
+# SIGNAL LOGIC
 # -----------------------------
 def generate_signal(df):
     short_ma = df["price"].rolling(5).mean()
@@ -42,22 +55,24 @@ def generate_signal(df):
         return "🟡 HOLD", "Sideways market"
 
 # -----------------------------
-# MAIN EXECUTION
+# MAIN APP
 # -----------------------------
 try:
     df = fetch_btc_data()
-    last_price = df["price"].iloc[-1]
+    data_source = "LIVE DATA"
 
-    signal, reason = generate_signal(df)
+except Exception:
+    df = fallback_data()
+    data_source = "DEMO DATA (API TEMP ISSUE)"
 
-    st.metric("💰 BTC Price (USD)", f"${last_price:,.2f}")
-    st.success(f"📢 SIGNAL: {signal}")
-    st.caption(reason)
+last_price = df["price"].iloc[-1]
+signal, reason = generate_signal(df)
 
-    with st.expander("📊 Last 10 Prices"):
-        st.dataframe(df.tail(10))
+st.metric("💰 BTC Price (USD)", f"${last_price:,.2f}")
+st.success(f"📢 SIGNAL: {signal}")
+st.caption(reason)
+st.info(f"Data Source: {data_source}")
 
-except Exception as e:
-    st.error("Live data failed. Please refresh.")
-    st.text(str(e))
+with st.expander("📊 Last 10 Prices"):
+    st.dataframe(df.tail(10))
     
