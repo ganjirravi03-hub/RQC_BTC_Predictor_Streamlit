@@ -1,29 +1,47 @@
 import streamlit as st
 import numpy as np
 
+# Page config
 st.set_page_config(
-    page_title="BTC Predictor",
+    page_title="BTC Price Predictor",
     page_icon="₿",
     layout="centered"
 )
 
+# =========================
+# BRAND LOGO
+# =========================
+st.image("assets/logo.png", width=180)
+
+# =========================
+# TITLE
+# =========================
 st.title("₿ BTC Price Predictor (Stable Demo)")
-st.write("Manual input → Prediction (Cloud-safe version)")
+st.caption("Manual input → Prediction (Cloud-safe version)")
 
-st.sidebar.header("Market Inputs")
+st.divider()
 
-open_price = st.sidebar.number_input("Open Price", value=50000.0)
-high_price = st.sidebar.number_input("High Price", value=51000.0)
-low_price = st.sidebar.number_input("Low Price", value=49500.0)
-volume = st.sidebar.number_input("Volume", value=1000.0)
-
-input_data = np.array([open_price, high_price, low_price, volume])
-
+# =========================
+# INPUT DATA
+# =========================
 st.subheader("Input Data")
-st.write(input_data)
 
+values = []
+for i in range(4):
+    val = st.number_input(
+        f"Value {i+1}",
+        value=50000 + i * 1000,
+        step=100
+    )
+    values.append(val)
+
+# =========================
+# PREDICTION BUTTON
+# =========================
 if st.button("Predict BTC Price"):
-    # Dummy prediction logic (safe for cloud)
-    predicted_price = (open_price + high_price + low_price) / 3
-    st.success(f"📈 Predicted BTC Price: ${predicted_price:,.2f}")
+    data = np.array(values)
+    prediction = round(data.mean(), 2)
+
+    st.success(f"📈 Predicted BTC Price: ${prediction}")
+    st.info("⚠️ Demo prediction (no live market / ML model yet)")
     
