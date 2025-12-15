@@ -1,131 +1,63 @@
 import streamlit as st
-import numpy as np
-import pandas as pd
 import requests
-import plotly.graph_objects as go
-import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
 
-# =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(
-    page_title="BTC Price Predictor",
-    page_icon="₿",
-    layout="wide"
-)
+st.set_page_config(page_title="BTC Phoenix Predictor", layout="centered")
 
-# =========================
-# PREMIUM HEADER (LOGO + TITLE)
-# =========================
-col1, col2 = st.columns([1, 4])
+st.title("🔥 BTC Phoenix – Live Buy / Sell / Hold")
+st.write("Real-time BTC signal engine (Stable & Fast)")
 
-with col1:
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=120)
+# -----------------------------
+# DATA FETCH (CoinGecko – No API Key)
+# -----------------------------
+@st.cache_data(ttl=60)
+def fetch_btc_data():
+    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    params = {
+        "vs_currency": "usd",
+        "days": "1",
+        "interval": "minute"
+    }
+    r = requests.get(url, params=params, timeout=10)
+    data = r.json()["prices"]
+
+    df = pd.DataFrame(data, columns=["time", "price"])
+    df["time"] = pd.to_datetime(df["time"], unit="ms")
+    return df
+
+# -----------------------------
+# SIGNAL LOGIC (PROFIT FRIENDLY)
+# -----------------------------
+def generate_signal(df):
+    short_ma = df["price"].rolling(5).mean()
+    long_ma = df["price"].rolling(20).mean()
+
+    if short_ma.iloc[-1] > long_ma.iloc[-1]:
+        return "🟢 BUY", "Uptrend detected"
+    elif short_ma.iloc[-1] < long_ma.iloc[-1]:
+        return "🔴 SELL", "Downtrend detected"
     else:
-        st.warning("Logo missing")
+        return "🟡 HOLD", "Sideways market"
 
-with col2:
-    st.markdown(
-        """
-        <h1 style='margin-bottom:0'>BTC Price Predictor</h1>
-        <p style='color:gray;margin-top:5px'>
-        Live Market View • Smart Prediction • Brand Demo
-        </p>
-        """,
-        unsafe_allow_html=True
-    )
-
-st.divider()
-
-# =========================
-# LIVE BTC PRICE
-# =========================
-st.subheader("📡 Live BTC Price")
-
-def get_live_btc():
-    url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-    r = requests.get(url, timeout=10)
-    return r.json()["bitcoin"]["usd"]
-
+# -----------------------------
+# MAIN EXECUTION
+# -----------------------------
 try:
-    live_price = get_live_btc()
-    st.metric("BTC / USD", f"${live_price:,}")
-except:
-    st.error("Live price fetch failed")
+    df = fetch_btc_data()
+    last_price = df["price"].iloc[-1]
 
-st.divider()
+    signal, reason = generate_signal(df)
 
-# =========================
-# INPUT SECTION
-# =========================
-st.subheader("🧠 Manual Input (Demo Prediction)")
+    st.metric("💰 BTC Price (USD)", f"${last_price:,.2f}")
+    st.success(f"📢 SIGNAL: {signal}")
+    st.caption(reason)
 
-values = []
-cols = st.columns(4)
-default_vals = [50000, 51000, 49500, 50500]
+    with st.expander("📊 Last 10 Prices"):
+        st.dataframe(df.tail(10))
 
-for i in range(4):
-    with cols[i]:
-        val = st.number_input(
-            f"Value {i+1}",
-            value=default_vals[i],
-            step=100
-        )
-        values.append(val)
-
-# =========================
-# PREDICTION + CHART
-# =========================
-if st.button("🚀 Predict BTC Price"):
-    arr = np.array(values)
-    prediction = round(arr.mean(), 2)
-
-    st.success(f"📈 Predicted BTC Price: ${prediction:,}")
-
-    # Chart
-    df = pd.DataFrame({
-        "Input Values": arr,
-        "Index": [1, 2, 3, 4]
-    })
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["Index"],
-        y=df["Input Values"],
-        mode="lines+markers",
-        name="Input Prices"
-    ))
-
-    fig.add_hline(
-        y=prediction,
-        line_dash="dash",
-        annotation_text="Prediction"
-    )
-
-    fig.update_layout(
-        title="BTC Input Trend vs Prediction",
-        xaxis_title="Sequence",
-        yaxis_title="Price (USD)",
-        template="plotly_dark"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.info("⚠️ Demo logic (Live ML model coming next)")
-
-st.divider()
-
-# =========================
-# FOOTER / MONETIZATION TEASER
-# =========================
-st.markdown(
-    """
-    ### 💎 Coming Soon
-    - 🤖 AI LSTM Prediction
-    - 📱 Android APK
-    - 🔐 Premium Signals
-    - 💰 Paid Membership Access
-    """
-)
+except Exception as e:
+    st.error("Live data failed. Please refresh.")
+    st.text(str(e))
+    
