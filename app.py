@@ -1,132 +1,57 @@
 import streamlit as st
-import yfinance as yf
-import pandas as pd
-import plotly.graph_objects as go
+import numpy as np
+import tensorflow as tf
 
-# =========================
+# ===============================
 # APP CONFIG
-# =========================
+# ===============================
 st.set_page_config(
     page_title="BTC Price Predictor",
-    page_icon="💰",
+    page_icon="₿",
     layout="centered"
 )
 
-st.title("💰 BTC Price Predictor")
-st.caption("Live BTC price data with timeframe & BUY / SELL signals")
+st.title("₿ BTC Price Predictor")
+st.write("Manual input → AI prediction (Stable version)")
 
-# =========================
-# TIMEFRAME SELECTOR
-# =========================
-st.subheader("⏱️ Select Timeframe")
+# ===============================
+# LOAD MODEL
+# ===============================
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model("BTC_HTM_model.h5")
 
-timeframe_map = {
-    "1 Hour": ("30d", "1h"),
-    "4 Hour": ("60d", "4h"),
-    "1 Day": ("1y", "1d"),
-    "1 Week": ("5y", "1wk"),
-}
-
-selected_tf = st.selectbox("Choose timeframe", list(timeframe_map.keys()))
-period, interval = timeframe_map[selected_tf]
-
-# =========================
-# FETCH BTC DATA
-# =========================
-@st.cache_data(ttl=300)
-def load_data(period, interval):
-    data = yf.download("BTC-USD", period=period, interval=interval)
-    data.dropna(inplace=True)
-    return data
-
-data = load_data(period, interval)
-
-if data.empty:
-    st.error("⚠️ No data received.")
+try:
+    model = load_model()
+    st.success("✅ Model loaded successfully")
+except Exception as e:
+    st.error("❌ Model load failed")
     st.stop()
 
-# =========================
-# LIVE DATA
-# =========================
-st.subheader("📈 Live BTC Data")
-st.dataframe(data.tail(10), width="stretch")
+# ===============================
+# USER INPUT
+# ===============================
+st.sidebar.header("Enter Market Data")
 
-# =========================
-# SIGNAL LOGIC
-# =========================
-st.subheader("🚦 Trading Signal")
+open_price = st.sidebar.number_input("Open Price", value=50000.0)
+high_price = st.sidebar.number_input("High Price", value=51000.0)
+low_price = st.sidebar.number_input("Low Price", value=49500.0)
+volume = st.sidebar.number_input("Volume", value=1000.0)
 
-data["MA_5"] = data["Close"].rolling(5).mean()
-data["MA_20"] = data["Close"].rolling(20).mean()
+# ===============================
+# PREPARE INPUT
+# ===============================
+input_data = np.array([[open_price, high_price, low_price, volume]])
+input_data = np.expand_dims(input_data, axis=0)  # (1, 1, 4)
 
-latest_price = float(data["Close"].iloc[-1])
-ma5 = data["MA_5"].iloc[-1]
-ma20 = data["MA_20"].iloc[-1]
+st.subheader("Input Data")
+st.write(input_data)
 
-price_text = f"${latest_price:,.2f}"
-
-if ma5 > ma20:
-    signal = "BUY 🚀"
-    color = "green"
-elif ma5 < ma20:
-    signal = "SELL 🔻"
-    color = "red"
-else:
-    signal = "HOLD ⚖️"
-    color = "orange"
-
-st.markdown(
-    f"""
-    <h2 style="color:{color}; text-align:center;">
-        {signal}
-    </h2>
-    <p style="text-align:center; font-size:18px;">
-        Latest Price: <b>{price_text}</b>
-    </p>
-    """,
-    unsafe_allow_html=True
-)
-
-# =========================
-# PRICE CHART
-# =========================
-st.subheader("📊 BTC Price Chart")
-
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(
-    x=data.index,
-    y=data["Close"],
-    name="BTC Price"
-))
-
-fig.add_trace(go.Scatter(
-    x=data.index,
-    y=data["MA_5"],
-    name="MA 5",
-    line=dict(dash="dot")
-))
-
-fig.add_trace(go.Scatter(
-    x=data.index,
-    y=data["MA_20"],
-    name="MA 20",
-    line=dict(dash="dash")
-))
-
-fig.update_layout(
-    template="plotly_white",
-    xaxis_title="Time",
-    yaxis_title="Price (USD)",
-    height=500
-)
-
-st.plotly_chart(fig, width="stretch")
-
-# =========================
-# FOOTER
-# =========================
-st.markdown(
-    "<hr><center>🔹 Made with ❤️ by <b>Ravi Ganjir</b></center>",
-    unsafe_allow_html=True
-)
+# ===============================
+# PREDICTION
+# ===============================
+if st.button("Predict BTC Price"):
+    prediction = model.predict(input_data)
+    st.subheader("📈 Predicted BTC Price")
+    st.success(f"${prediction[0][0]:,.2f}")
+    
