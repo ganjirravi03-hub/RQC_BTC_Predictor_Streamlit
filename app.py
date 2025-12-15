@@ -6,8 +6,10 @@ from datetime import datetime
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="centered")
+
+# ---------------- TITLE ----------------
 st.title("🔥 BTC Phoenix – Live Buy / Sell / Hold")
-st.caption("Stable BTC Signal Engine (v1.0 FINAL)")
+st.caption("Stable BTC Signal Engine (FINAL v1.1)")
 
 # ---------------- DATA FETCH ----------------
 @st.cache_data(ttl=60)
@@ -55,12 +57,36 @@ except:
 
 price = df["price"].iloc[-1]
 signal, reason = signal_engine(df)
+last_update = datetime.now().strftime("%d %b %Y | %H:%M:%S")
 
+# ---------------- UI BADGE ----------------
+if source == "LIVE":
+    st.success("🟢 LIVE DATA")
+else:
+    st.warning("🟡 DEMO DATA (API TEMP ISSUE)")
+
+# ---------------- BIG SIGNAL BANNER ----------------
+st.markdown(
+    f"""
+    <div style="padding:20px;border-radius:15px;
+    background-color:#0f172a;color:white;text-align:center;
+    font-size:28px;font-weight:bold;">
+    {signal}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.write("")
 st.metric("💰 BTC Price (USD)", f"${price:,.2f}")
-st.success(f"📢 SIGNAL: {signal}")
-st.info(f"Reason: {reason}")
-st.caption(f"Data Source: {source}")
+st.caption(f"📌 Reason: {reason}")
+st.caption(f"⏱ Last Update: {last_update}")
 
+# ---------------- PRICE CHART ----------------
+st.subheader("📈 BTC Price (Last 60 Minutes)")
+st.line_chart(df.set_index("time")["price"])
+
+# ---------------- DATA TABLE ----------------
 with st.expander("📊 Last 10 Data Points"):
     st.dataframe(df.tail(10))
     
