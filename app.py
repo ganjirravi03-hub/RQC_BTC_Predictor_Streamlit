@@ -1,73 +1,126 @@
-# ===============================
-# BTC Predictor Streamlit App
-# ===============================
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
 import joblib
-import plotly.graph_objs as go
 
-st.set_page_config(page_title="BTC Predictor", layout="wide")
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="BTC Price Predictor",
+    page_icon="💰",
+    layout="wide"
+)
 
 st.title("💰 BTC Price Predictor")
-st.write("Live BTC price data and prediction app powered by AI/ML")
+st.caption("Live BTC price data and prediction app powered by AI/ML")
 
-# -------------------------------
-# Load your trained model
-# -------------------------------
-try:
-    model = joblib.load("model.pkl")  # Upload your trained model in workspace
-    st.success("✅ Model loaded successfully")
-except:
-    st.warning("⚠️ Model not found. Upload 'model.pkl' in your workspace")
+# =========================
+# TIMEFRAME SELECTOR
+# =========================
+st.subheader("⏱️ Select Timeframe")
 
-# -------------------------------
-# Optionally use API keys (Secrets)
-# -------------------------------
-# Uncomment if you want to use Binance API
-# api_key = st.secrets["BINANCE_API_KEY"]
-# api_secret = st.secrets["BINANCE_API_SECRET"]
+timeframe_map = {
+    "1 Hour": ("7d", "1h"),
+    "4 Hour": ("30d", "4h"),
+    "1 Day": ("6mo", "1d"),
+    "1 Week": ("2y", "1wk"),
+}
 
-# -------------------------------
-# Fetch BTC data
-# -------------------------------
-st.subheader("📈 Live BTC Data")
-btc_data = yf.download(
-    tickers="BTC-USD",
-    period="30d",
-    interval="1h",
-    auto_adjust=True,    # last 30 days data only
-    progress=False
+selected_tf = st.selectbox(
+    "Choose timeframe",
+    list(timeframe_map.keys())
 )
-btc_data.reset_index(inplace=True)
-st.dataframe(btc_data.tail(5))  # Show last 5 rows
 
-# -------------------------------
-# Prediction
-# -------------------------------
+period, interval = timeframe_map[selected_tf]
+
+# =========================
+# FETCH BTC DATA
+# =========================
+@st.cache_data(ttl=300)
+def load_btc_data(period, interval):
+    data = yf.download(
+        tickers="BTC-USD",
+        period=period,
+        interval=interval,
+        progress=False
+    )
+    return data
+
+btc_data = load_btc_data(period, interval)
+
+# =========================
+# SHOW LIVE DATA
+# =========================
+st.subheader("📈 Live BTC Data")
+
+if btc_data.empty:
+    st.error("BTC data not available right now.")
+    st.stop()
+
+st.dataframe(btc_data.tail(5), width="stretch")
+
+# =========================
+# LOAD MODEL (UPLOAD)
+# =========================
 st.subheader("🤖 Predict BTC Price")
 
-# Prepare input features (simple example: using previous closing price)
-if 'Close' in btc_data.columns:
-    latest_close = btc_data['Close'].values[-1].reshape(1, -1)  # shape for model
-    if 'model' in locals():
-        predicted_price = model.predict(latest_close)[0]
-        st.metric("Predicted BTC Price (next interval)", f"${predicted_price:,.2f}")
-    else:
-        st.info("Upload a trained model to get predictions")
+uploaded_model = st.file_uploader(
+    "Upload your trained model (model.pkl)",
+    type=["pkl"]
+)
 
-# -------------------------------
-# Plot BTC chart
-# -------------------------------
+model = None
+if uploaded_model is not None:
+    model = joblib.load(uploaded_model)
+    st.success("✅ Model loaded successfully")
+
+# =========================
+# PREDICTION
+# =========================
+if model is not None and "Close" in btc_data.columns and len(btc_data) > 0:
+    latest_close = np.array([[btc_data["Close"].iloc[-1]]])
+
+    try:
+        prediction = model.predict(latest_close)[0]
+        st.metric(
+            "Predicted BTC Price (Next Interval)",
+            f"${prediction:,.2f}"
+        )
+    except Exception as e:
+        st.error("Prediction error. Check model input shape.")
+else:
+    st.info("⬆️ Upload model.pkl to activate prediction")
+
+# =========================
+# BTC PRICE CHART
+# =========================
 st.subheader("📊 BTC Price Chart")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=btc_data['Datetime'], y=btc_data['Close'], mode='lines', name='BTC Close'))
-fig.update_layout(title="BTC Price Last 30 Days", xaxis_title="Date", yaxis_title="Price (USD)")
-st.plotly_chart(fig, width='stretch')  # future proof
 
-# -------------------------------
-# Footer
-# -------------------------------
-st.write("🔹 Made with ❤️ by Ravi Ganjir")
+fig = go.Figure()
+
+fig.add_trace(
+    go.Scatter(
+        x=btc_data.index,
+        y=btc_data["Close"],
+        mode="lines",
+        name="BTC Close Price"
+    )
+)
+
+fig.update_layout(
+    xaxis_title="Time",
+    yaxis_title="Price (USD)",
+    template="plotly_dark",
+    height=500
+)
+
+st.plotly_chart(fig, width="stretch")
+
+# =========================
+# FOOTER
+# =========================
+st.markdown("---")
+st.caption("🔹 Made with ❤️ by Ravi Ganjir")
