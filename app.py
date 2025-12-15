@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-import numpy as np
 
 # =========================
 # APP CONFIG
@@ -36,37 +35,35 @@ period, interval = timeframe_map[selected_tf]
 # =========================
 @st.cache_data(ttl=300)
 def load_data(period, interval):
-    data = yf.download(
-        tickers="BTC-USD",
-        period=period,
-        interval=interval
-    )
+    data = yf.download("BTC-USD", period=period, interval=interval)
     data.dropna(inplace=True)
     return data
 
 data = load_data(period, interval)
 
 if data.empty:
-    st.error("⚠️ No data received. Try another timeframe.")
+    st.error("⚠️ No data received.")
     st.stop()
 
 # =========================
-# LIVE DATA TABLE
+# LIVE DATA
 # =========================
 st.subheader("📈 Live BTC Data")
 st.dataframe(data.tail(10), width="stretch")
 
 # =========================
-# BUY / SELL SIGNAL LOGIC
+# SIGNAL LOGIC
 # =========================
 st.subheader("🚦 Trading Signal")
 
 data["MA_5"] = data["Close"].rolling(5).mean()
 data["MA_20"] = data["Close"].rolling(20).mean()
 
-latest_price = data["Close"].iloc[-1]
+latest_price = float(data["Close"].iloc[-1])
 ma5 = data["MA_5"].iloc[-1]
 ma20 = data["MA_20"].iloc[-1]
+
+price_text = f"${latest_price:,.2f}"
 
 if ma5 > ma20:
     signal = "BUY 🚀"
@@ -80,11 +77,11 @@ else:
 
 st.markdown(
     f"""
-    <h2 style='color:{color}; text-align:center'>
+    <h2 style="color:{color}; text-align:center;">
         {signal}
     </h2>
-    <p style='text-align:center'>
-        Latest Price: <b>${latest_price:,.2f}</b>
+    <p style="text-align:center; font-size:18px;">
+        Latest Price: <b>{price_text}</b>
     </p>
     """,
     unsafe_allow_html=True
@@ -100,8 +97,7 @@ fig = go.Figure()
 fig.add_trace(go.Scatter(
     x=data.index,
     y=data["Close"],
-    name="BTC Price",
-    line=dict(width=2)
+    name="BTC Price"
 ))
 
 fig.add_trace(go.Scatter(
@@ -119,9 +115,9 @@ fig.add_trace(go.Scatter(
 ))
 
 fig.update_layout(
+    template="plotly_white",
     xaxis_title="Time",
     yaxis_title="Price (USD)",
-    template="plotly_white",
     height=500
 )
 
