@@ -34,9 +34,14 @@ except:
 # Fetch BTC data
 # -------------------------------
 st.subheader("📈 Live BTC Data")
-btc_data = yf.download(tickers="BTC-USD", period="30d", interval="1h")
+btc_data = yf.download(
+    tickers="BTC-USD",
+    period="30d",
+    interval="1h",
+    auto_adjust=True,    # last 30 days data only
+    progress=False
+)
 btc_data.reset_index(inplace=True)
-
 st.dataframe(btc_data.tail(5))  # Show last 5 rows
 
 # -------------------------------
@@ -60,7 +65,7 @@ st.subheader("📊 BTC Price Chart")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=btc_data['Datetime'], y=btc_data['Close'], mode='lines', name='BTC Close'))
 fig.update_layout(title="BTC Price Last 30 Days", xaxis_title="Date", yaxis_title="Price (USD)")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width='stretch')  # future proof
 
 # -------------------------------
 # Footer
