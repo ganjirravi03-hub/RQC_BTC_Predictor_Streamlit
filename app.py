@@ -1,70 +1,59 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import numpy as np
+import pickle
 import plotly.graph_objects as go
-import joblib
 
-# =========================
+# -------------------------------
 # PAGE CONFIG
-# =========================
-st.set_page_config(
-    page_title="BTC Price Predictor",
-    page_icon="💰",
-    layout="wide"
-)
+# -------------------------------
+st.set_page_config(page_title="BTC Price Predictor", layout="centered")
 
 st.title("💰 BTC Price Predictor")
 st.caption("Live BTC price data and prediction app powered by AI/ML")
 
-# =========================
-# TIMEFRAME SELECTOR
-# =========================
-st.subheader("⏱️ Select Timeframe")
+# -------------------------------
+# TIMEFRAME SELECT
+# -------------------------------
+st.subheader("⏱ Select Timeframe")
 
 timeframe_map = {
-    "1 Hour": ("7d", "1h"),
-    "4 Hour": ("30d", "4h"),
-    "1 Day": ("6mo", "1d"),
-    "1 Week": ("2y", "1wk"),
+    "1 Hour": "1h",
+    "4 Hours": "4h",
+    "1 Day": "1d"
 }
 
-selected_tf = st.selectbox(
+selected_timeframe = st.selectbox(
     "Choose timeframe",
     list(timeframe_map.keys())
 )
 
-period, interval = timeframe_map[selected_tf]
+interval = timeframe_map[selected_timeframe]
 
-# =========================
+# -------------------------------
 # FETCH BTC DATA
-# =========================
-@st.cache_data(ttl=300)
-def load_btc_data(period, interval):
-    data = yf.download(
-        tickers="BTC-USD",
-        period=period,
-        interval=interval,
-        progress=False
+# -------------------------------
+@st.cache_data
+def load_btc_data(interval):
+    df = yf.download(
+        "BTC-USD",
+        period="7d",
+        interval=interval
     )
-    return data
+    df.reset_index(inplace=True)
+    return df
 
-btc_data = load_btc_data(period, interval)
+df = load_btc_data(interval)
 
-# =========================
+# -------------------------------
 # SHOW LIVE DATA
-# =========================
-st.subheader("📈 Live BTC Data")
+# -------------------------------
+st.subheader("📊 Live BTC Data")
+st.dataframe(df.tail(10), use_container_width=True)
 
-if btc_data.empty:
-    st.error("BTC data not available right now.")
-    st.stop()
-
-st.dataframe(btc_data.tail(5), width="stretch")
-
-# =========================
-# LOAD MODEL (UPLOAD)
-# =========================
+# -------------------------------
+# MODEL UPLOAD
+# -------------------------------
 st.subheader("🤖 Predict BTC Price")
 
 uploaded_model = st.file_uploader(
@@ -72,55 +61,53 @@ uploaded_model = st.file_uploader(
     type=["pkl"]
 )
 
-model = None
-if uploaded_model is not None:
-    model = joblib.load(uploaded_model)
-    st.success("✅ Model loaded successfully")
+prediction = None
 
-# =========================
-# PREDICTION
-# =========================
-if model is not None and "Close" in btc_data.columns and len(btc_data) > 0:
-    latest_close = np.array([[btc_data["Close"].iloc[-1]]])
+if uploaded_model:
+    model = pickle.load(uploaded_model)
 
-    try:
-        prediction = model.predict(latest_close)[0]
-        st.metric(
-            "Predicted BTC Price (Next Interval)",
-            f"${prediction:,.2f}"
-        )
-    except Exception as e:
-        st.error("Prediction error. Check model input shape.")
+    last_close = df["Close"].iloc[-1]
+    prediction = model.predict([[last_close]])[0]
+
+    st.success(f"📈 Predicted Next Price: **${prediction:,.2f}**")
+
 else:
-    st.info("⬆️ Upload model.pkl to activate prediction")
+    st.info("⬆ Upload model.pkl to activate prediction")
 
-# =========================
-# BTC PRICE CHART
-# =========================
-st.subheader("📊 BTC Price Chart")
+# -------------------------------
+# PRICE CHART
+# -------------------------------
+st.subheader("📉 BTC Price Chart")
 
 fig = go.Figure()
 
-fig.add_trace(
-    go.Scatter(
-        x=btc_data.index,
-        y=btc_data["Close"],
-        mode="lines",
-        name="BTC Close Price"
-    )
-)
+fig.add_trace(go.Scatter(
+    x=df["Datetime"] if "Datetime" in df.columns else df["Date"],
+    y=df["Close"],
+    mode="lines",
+    name="BTC Price"
+))
+
+if prediction:
+    fig.add_trace(go.Scatter(
+        x=[df.iloc[-1, 0]],
+        y=[prediction],
+        mode="markers",
+        marker=dict(size=10),
+        name="Prediction"
+    ))
 
 fig.update_layout(
     xaxis_title="Time",
     yaxis_title="Price (USD)",
-    template="plotly_dark",
-    height=500
+    height=400
 )
 
-st.plotly_chart(fig, width="stretch")
+st.plotly_chart(fig, use_container_width=True)
 
-# =========================
+# -------------------------------
 # FOOTER
-# =========================
+# -------------------------------
 st.markdown("---")
-st.caption("🔹 Made with ❤️ by Ravi Ganjir")
+st.markdown("🔹 Made with ❤️ by **Ravi Ganjir**")
+
