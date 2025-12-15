@@ -1,0 +1,29 @@
+import streamlit as st
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+
+# Load model
+MODEL_PATH = 'BTC_HTM_model.h5'
+try:
+    model = tf.keras.models.load_model(MODEL_PATH)
+    st.success("Model loaded successfully!")
+except Exception as e:
+    st.error(f"Error loading model: {e}")
+    st.stop()
+
+# Sample input
+st.sidebar.header("Input Parameters")
+open_price = st.sidebar.number_input('Open Price', value=50000.0)
+high_price = st.sidebar.number_input('High Price', value=51000.0)
+low_price = st.sidebar.number_input('Low Price', value=49500.0)
+volume = st.sidebar.number_input('Volume', value=1000.0)
+
+# Prepare input (example)
+X_input = np.array([[open_price, high_price, low_price, volume]])
+X_input = np.expand_dims(X_input, axis=0)
+
+# Predict
+prediction = model.predict(X_input)
+st.subheader("Predicted BTC Price")
+st.write(prediction[0][0])
