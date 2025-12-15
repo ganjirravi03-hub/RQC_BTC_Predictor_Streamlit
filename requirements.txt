@@ -1,9 +1,8 @@
 streamlit
-
-streamlit
 yfinance
 pandas
 numpy
 scikit-learn
 plotly
 joblib
+
