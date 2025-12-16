@@ -34,7 +34,7 @@ def register_user(email, password):
 def login_user(email, password):
     c.execute("SELECT password FROM users WHERE email=?", (email,))
     data = c.fetchone()
-    if data and bcrypt.checkpw(password.encode(), data[0]):
+    if data and bcrypt.checkpw(password.encode(), bytes(data[0])):
         return True
     return False
 
