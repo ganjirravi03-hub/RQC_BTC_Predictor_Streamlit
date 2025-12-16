@@ -5,12 +5,13 @@ import altair as alt
 import bcrypt
 import json
 import os
+from datetime import datetime
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
 USER_FILE = "users.json"
 
-# ---------------- USER DB HELPERS ----------------
+# ---------------- USER DB ----------------
 def load_users():
     if not os.path.exists(USER_FILE):
         with open(USER_FILE, "w") as f:
@@ -34,7 +35,7 @@ if "logged_in" not in st.session_state:
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ---------------- AUTH PAGE ----------------
+# ---------------- AUTH ----------------
 def auth_page():
     st.title("🔐 BTC Phoenix Secure Login")
 
@@ -66,35 +67,52 @@ def auth_page():
                 save_users(users)
                 st.success("Registration successful. Please login.")
 
-# ---------------- BTC DATA ----------------
+# ---------------- BTC DATA (LIVE + FALLBACK) ----------------
 def get_btc_data():
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency": "usd", "days": 1, "interval": "minute"}
-    r = requests.get(url, params=params, timeout=10)
-    data = r.json()
+    try:
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+        params = {"vs_currency": "usd", "days": 1, "interval": "minute"}
+        r = requests.get(url, params=params, timeout=10)
 
-    prices = data.get("prices", [])
-    if not prices:
-        return pd.DataFrame()
+        if r.status_code != 200:
+            raise Exception("API error")
 
-    df = pd.DataFrame(prices, columns=["time", "price"])
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
-    return df
+        data = r.json()
+        prices = data.get("prices", [])
 
-# ---------------- SIMPLE BTC PREDICTION (PHASE-2A) ----------------
+        if not prices:
+            raise Exception("Empty data")
+
+        df = pd.DataFrame(prices, columns=["time", "price"])
+        df["time"] = pd.to_datetime(df["time"], unit="ms")
+        df["source"] = "LIVE"
+        return df
+
+    except Exception:
+        # -------- FALLBACK DEMO DATA --------
+        times = pd.date_range(end=datetime.now(), periods=60, freq="min")
+        prices = [87000 + i * 2 for i in range(60)]
+
+        df = pd.DataFrame({
+            "time": times,
+            "price": prices,
+            "source": "DEMO"
+        })
+        return df
+
+# ---------------- SIMPLE PREDICTION ----------------
 def btc_prediction(df):
     if len(df) < 10:
-        return "HOLD", 50, "Insufficient data"
+        return "HOLD", "Low data"
 
-    recent = df["price"].tail(10)
-    diff = recent.iloc[-1] - recent.iloc[0]
+    diff = df["price"].iloc[-1] - df["price"].iloc[-10]
 
     if diff > 0:
-        return "BUY", 65, "Short-term upward momentum"
+        return "BUY", "Uptrend momentum"
     elif diff < 0:
-        return "SELL", 65, "Short-term downward momentum"
+        return "SELL", "Downtrend momentum"
     else:
-        return "HOLD", 50, "Sideways market"
+        return "HOLD", "Sideways market"
 
 # ---------------- DASHBOARD ----------------
 def dashboard():
@@ -102,49 +120,40 @@ def dashboard():
     st.caption(f"Welcome {st.session_state.user}")
 
     df = get_btc_data()
-    if df.empty or len(df) < 2:
-        st.warning("⚠️ Live BTC data temporarily unavailable. Refresh again.")
-        st.stop()
-
     latest_price = df["price"].iloc[-1]
+    source = df["source"].iloc[-1]
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
+
     with col1:
         st.metric("💰 BTC Price (USD)", f"${latest_price:,.2f}")
-        st.success("Source: CoinGecko (Live)")
+
     with col2:
-        st.info("Phase-2A: Prediction Active")
+        if source == "LIVE":
+            st.success("Source: CoinGecko (Live)")
+        else:
+            st.warning("Source: Demo / Fallback")
 
-    chart = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(x="time:T", y="price:Q", tooltip=["price"])
-        .properties(height=400)
-    )
-
-    st.subheader("📈 BTC Price Chart (Last 24 Hours)")
-    st.altair_chart(chart, use_container_width=True)
-    st.caption(f"Last update: {df['time'].iloc[-1]}")
-
-    # -------- PREDICTION PANEL --------
-    st.markdown("---")
-    st.subheader("🔮 BTC Prediction (Educational)")
-
-    signal, confidence, reason = btc_prediction(df)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
+    with col3:
+        signal, reason = btc_prediction(df)
         if signal == "BUY":
             st.success("🟢 BUY")
         elif signal == "SELL":
             st.error("🔴 SELL")
         else:
             st.warning("🟡 HOLD")
-    with c2:
-        st.metric("Confidence", f"{confidence}%")
-    with c3:
-        st.write(reason)
 
+    # -------- CHART --------
+    st.subheader("📈 BTC Price Chart (Last 24 Hours)")
+    chart = (
+        alt.Chart(df)
+        .mark_line()
+        .encode(x="time:T", y="price:Q", tooltip=["price"])
+        .properties(height=400)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+    st.caption(f"Last update: {df['time'].iloc[-1]}")
     st.caption("⚠️ Educational purpose only. Not financial advice.")
 
     if st.button("Logout"):
@@ -157,4 +166,4 @@ if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
-    
+        
