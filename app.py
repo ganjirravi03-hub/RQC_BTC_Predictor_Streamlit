@@ -6,13 +6,11 @@ import bcrypt
 import json
 import os
 from datetime import datetime
-import pickle
-import numpy as np
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
 USER_FILE = "users.json"
-RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"  # 👈 Apna link yahan dalo
+RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"
 
 # ---------------- USER DB ----------------
 def load_users():
@@ -85,20 +83,20 @@ def get_btc_data():
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
 
-# ---------------- ML MODEL LOAD ----------------
-MODEL_PATH = "models/btc_predictor.pkl"
-if os.path.exists(MODEL_PATH):
-    with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
-else:
-    model = None
+# ---------------- RULE BASED PREDICTION ----------------
+def rule_based_prediction(prices):
+    if len(prices) < 10:
+        return "⚖️ SIDEWAYS"
 
-def predict_btc(input_data):
-    if model is None:
-        return None
-    data_array = np.array(input_data).reshape(1, -1)
-    prediction = model.predict(data_array)
-    return float(prediction[0])
+    first = prices[0]
+    last = prices[-1]
+
+    if last > first:
+        return "📈 UP ⬆️ (Bullish)"
+    elif last < first:
+        return "📉 DOWN ⬇️ (Bearish)"
+    else:
+        return "⚖️ SIDEWAYS"
 
 # ---------------- DASHBOARD ----------------
 def dashboard():
@@ -116,14 +114,15 @@ def dashboard():
     st.metric("💰 BTC Price (USD)", f"${df['price'].iloc[-1]:,.2f}")
 
     chart = alt.Chart(df).mark_line().encode(
-        x="time:T", y="price:Q"
+        x="time:T",
+        y="price:Q"
     ).properties(height=350)
-    st.altair_chart(chart, use_container_width=True)
+
+    st.altair_chart(chart, width="stretch")
 
     st.divider()
     st.subheader("🤖 BTC Prediction Panel")
 
-    # ---------- PAID CHECK ----------
     if not user["paid"]:
         st.warning("🔒 Premium feature locked")
         st.markdown("### 💳 Unlock Premium – ₹199")
@@ -132,21 +131,16 @@ def dashboard():
         if st.button("✅ I have paid"):
             users[st.session_state.user]["paid"] = True
             save_users(users)
-            st.success("Payment verified manually. Access granted.")
+            st.success("Payment verified. Access granted.")
             st.rerun()
     else:
         st.success("✅ Premium Access Active")
 
-        # ---------- AUTO ML PREDICTION ----------
-        # Automatically fetch last 5 BTC prices
-        last_5_prices = df['price'].iloc[-5:].tolist()
+        last_prices = df["price"].iloc[-10:].tolist()
+        signal = rule_based_prediction(last_prices)
 
-        if st.button("Predict BTC Price (Auto)"):
-            predicted_price = predict_btc(last_5_prices)
-            if predicted_price is not None:
-                st.metric("📈 Predicted BTC Price", f"${predicted_price:.2f}")
-            else:
-                st.warning("ML model not loaded. Prediction unavailable.")
+        st.metric("📊 Market Signal", signal)
+        st.caption("Rule-Based Smart Analysis | ML Upgrade Coming")
 
     st.divider()
     if st.button("Logout"):
