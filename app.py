@@ -1,88 +1,81 @@
 import streamlit as st
+import sqlite3
 import bcrypt
-import json
-import os
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", page_icon="🔐", layout="centered")
 
-USER_DB = "users.json"
+# ---------------- DATABASE ----------------
+conn = sqlite3.connect("users.db", check_same_thread=False)
+c = conn.cursor()
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    email TEXT PRIMARY KEY,
+    password BLOB
+)
+""")
+conn.commit()
 
 # ---------------- HELPERS ----------------
-def load_users():
-    if not os.path.exists(USER_DB):
-        return {}
-    with open(USER_DB, "r") as f:
-        return json.load(f)
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-def save_users(users):
-    with open(USER_DB, "w") as f:
-        json.dump(users, f)
+def verify_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed)
 
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+def user_exists(email):
+    c.execute("SELECT * FROM users WHERE email=?", (email,))
+    return c.fetchone() is not None
 
-def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+def create_user(email, password):
+    hashed = hash_password(password)
+    c.execute("INSERT INTO users VALUES (?, ?)", (email, hashed))
+    conn.commit()
 
-# ---------------- SESSION INIT ----------------
+def authenticate(email, password):
+    c.execute("SELECT password FROM users WHERE email=?", (email,))
+    result = c.fetchone()
+    if result:
+        return verify_password(password, result[0])
+    return False
+
+# ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-if "user_email" not in st.session_state:
-    st.session_state.user_email = ""
+
+# ---------------- UI ----------------
+st.title("🔐 BTC Phoenix Secure Login")
+
+tab1, tab2 = st.tabs(["Login", "Register"])
+
+# ---------- LOGIN ----------
+with tab1:
+    email = st.text_input("📧 Email")
+    password = st.text_input("🔑 Password", type="password")
+
+    if st.button("Login"):
+        if authenticate(email, password):
+            st.session_state.logged_in = True
+            st.success("✅ Login successful")
+            st.rerun()
+        else:
+            st.error("❌ Invalid email or password")
+
+# ---------- REGISTER ----------
+with tab2:
+    new_email = st.text_input("📧 New Email")
+    new_password = st.text_input("🔑 New Password", type="password")
+
+    if st.button("Register"):
+        if user_exists(new_email):
+            st.error("❌ Email already exists")
+        else:
+            create_user(new_email, new_password)
+            st.success("✅ Registration successful. Now login.")
 
 # ---------------- DASHBOARD ----------------
-def dashboard():
-    st.success(f"✅ Welcome {st.session_state.user_email}")
-    st.header("📊 BTC Phoenix Dashboard")
-
-    st.write("🔒 Your account is secure.")
-    st.write("🚀 Prediction system coming next.")
-
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
-        st.rerun()
-
-# ---------------- AUTH UI ----------------
-def auth_page():
-    st.title("🔐 BTC Phoenix Secure Login")
-
-    tab1, tab2 = st.tabs(["Login", "Register"])
-
-    users = load_users()
-
-    # -------- LOGIN --------
-    with tab1:
-        email = st.text_input("📧 Email")
-        password = st.text_input("🔑 Password", type="password")
-
-        if st.button("Login"):
-            if email in users and verify_password(password, users[email]):
-                st.session_state.logged_in = True
-                st.session_state.user_email = email
-                st.rerun()
-            else:
-                st.error("❌ Invalid email or password")
-
-    # -------- REGISTER --------
-    with tab2:
-        new_email = st.text_input("📧 New Email")
-        new_password = st.text_input("🔑 New Password", type="password")
-
-        if st.button("Register"):
-            if new_email in users:
-                st.warning("⚠️ Email already registered")
-            elif len(new_password) < 6:
-                st.warning("⚠️ Password minimum 6 characters")
-            else:
-                users[new_email] = hash_password(new_password)
-                save_users(users)
-                st.success("✅ Registration successful. Now login.")
-
-# ---------------- MAIN ----------------
 if st.session_state.logged_in:
-    dashboard()
-else:
-    auth_page()
-                
+    st.success("🎉 Welcome to BTC Phoenix Dashboard")
+    st.write("🚀 Next step: BTC Live Data & Prediction")
+    
