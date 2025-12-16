@@ -1,10 +1,9 @@
 import streamlit as st
 import sqlite3
 import bcrypt
-import requests
 
 # ---------------- CONFIG ----------------
-st.set_page_config(page_title="BTC Phoenix", page_icon="🔐", layout="centered")
+st.set_page_config(page_title="BTC Phoenix", layout="centered")
 
 # ---------------- DB ----------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
@@ -21,86 +20,67 @@ conn.commit()
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_email" not in st.session_state:
-    st.session_state.user_email = None
+    st.session_state.user_email = ""
 
 # ---------------- HELPERS ----------------
-def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-
-def check_password(password, hashed):
-    return bcrypt.checkpw(password.encode(), hashed)
-
-def get_btc_price():
+def register_user(email, password):
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
     try:
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price",
-            params={"ids": "bitcoin", "vs_currencies": "usd"},
-            timeout=10
-        )
-        return r.json()["bitcoin"]["usd"]
+        c.execute("INSERT INTO users VALUES (?,?)", (email, hashed))
+        conn.commit()
+        return True
     except:
-        return None
+        return False
 
-# ---------------- LOGIN PAGE ----------------
-def login_register():
-    st.markdown("## 🔐 BTC Phoenix Secure Login")
+def login_user(email, password):
+    c.execute("SELECT password FROM users WHERE email=?", (email,))
+    data = c.fetchone()
+    if data and bcrypt.checkpw(password.encode(), data[0]):
+        return True
+    return False
 
-    tab1, tab2 = st.tabs(["Login", "Register"])
+# ---------------- UI ----------------
+st.title("🔐 BTC Phoenix Secure Login")
 
-    # ---------- LOGIN ----------
-    with tab1:
-        email = st.text_input("📧 Email")
-        password = st.text_input("🔑 Password", type="password")
+menu = st.tabs(["Login", "Register"])
 
-        if st.button("Login"):
-            c.execute("SELECT password FROM users WHERE email=?", (email,))
-            row = c.fetchone()
+# -------- LOGIN --------
+with menu[0]:
+    st.subheader("Login")
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Password", type="password", key="login_pass")
 
-            if row and check_password(password, row[0]):
-                st.session_state.logged_in = True
-                st.session_state.user_email = email
-                st.success("Login successful ✅")
-                st.rerun()
-            else:
-                st.error("❌ Invalid email or password")
+    if st.button("Login"):
+        if login_user(email, password):
+            st.session_state.logged_in = True
+            st.session_state.user_email = email
+            st.success("Login successful")
+        else:
+            st.error("Invalid email or password")
 
-    # ---------- REGISTER ----------
-    with tab2:
-        new_email = st.text_input("📧 New Email")
-        new_password = st.text_input("🔑 New Password", type="password")
+# -------- REGISTER --------
+with menu[1]:
+    st.subheader("Register")
+    new_email = st.text_input("New Email")
+    new_pass = st.text_input("New Password", type="password")
 
-        if st.button("Register"):
-            c.execute("SELECT * FROM users WHERE email=?", (new_email,))
-            if c.fetchone():
-                st.error("Email already exists")
-            else:
-                hashed = hash_password(new_password)
-                c.execute(
-                    "INSERT INTO users (email, password) VALUES (?, ?)",
-                    (new_email, hashed)
-                )
-                conn.commit()
-                st.success("✅ Registration successful. Now login.")
+    if st.button("Register"):
+        if register_user(new_email, new_pass):
+            st.success("Registration successful. Now login.")
+        else:
+            st.error("Email already exists")
 
 # ---------------- DASHBOARD ----------------
-def dashboard():
-    st.markdown("## 🚀 BTC Phoenix Dashboard")
-    st.write(f"👤 Logged in as: **{st.session_state.user_email}**")
+if st.session_state.logged_in:
+    st.divider()
+    st.success(f"Welcome {st.session_state.user_email}")
+    st.header("📊 BTC Dashboard")
 
-    price = get_btc_price()
-    if price:
-        st.metric("💰 Bitcoin Price (USD)", f"${price:,}")
-    else:
-        st.error("Failed to fetch BTC price")
+    st.metric("BTC Price", "$ Loading...")
+    st.info("Next: BTC chart + ML prediction")
 
     if st.button("Logout"):
         st.session_state.logged_in = False
-        st.session_state.user_email = None
+        st.session_state.user_email = ""
         st.rerun()
-
-# ---------------- ROUTER ----------------
-if st.session_state.logged_in:
-    dashboard()
-else:
-    login_register()
-    
+        
