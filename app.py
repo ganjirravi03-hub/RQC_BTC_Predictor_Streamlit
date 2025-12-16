@@ -66,49 +66,59 @@ def auth_page():
                 save_users(users)
                 st.success("Registration successful. Please login.")
 
-# ---------------- BTC DATA ----------------
+# ---------------- BTC DATA (SAFE) ----------------
 def get_btc_data():
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency": "usd", "days": 1, "interval": "minute"}
-    r = requests.get(url, params=params, timeout=10)
-    data = r.json()
+    try:
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+        params = {"vs_currency": "usd", "days": 1}
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
 
-    prices = data.get("prices", [])
-    if not prices:
+        prices = data.get("prices", [])
+        if not prices:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(prices, columns=["time", "price"])
+        df["time"] = pd.to_datetime(df["time"], unit="ms")
+        return df
+
+    except Exception:
         return pd.DataFrame()
 
-    df = pd.DataFrame(prices, columns=["time", "price"])
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
-    return df
-
-# ---------------- DASHBOARD ----------------
+# ---------------- DASHBOARD (FINAL FIXED) ----------------
 def dashboard():
     st.title("📊 BTC Phoenix Dashboard")
-    st.caption(f"Welcome {st.session_state.user}")
+    st.success(f"Welcome {st.session_state.user}")
 
     df = get_btc_data()
-    if df.empty or len(df) < 2:
-        st.warning("⚠️ Live BTC data temporarily unavailable. Refresh again.")
+
+    if df.empty:
+        st.warning("⚠️ Live BTC data temporarily unavailable. Refresh after 1 min.")
         st.stop()
 
-    latest_price = df["price"].iloc[-1]
+    latest_price = float(df["price"].iloc[-1])
 
     col1, col2 = st.columns(2)
     with col1:
         st.metric("💰 BTC Price (USD)", f"${latest_price:,.2f}")
-        st.success("Data Source: LIVE (CoinGecko)")
+        st.caption("Source: CoinGecko (Live)")
     with col2:
-        st.info("Next: ML Prediction + Paid Access")
+        st.info("Next Phase: ML Prediction • Paid Access • APK")
 
     chart = (
         alt.Chart(df)
         .mark_line()
-        .encode(x="time:T", y="price:Q", tooltip=["price"])
+        .encode(
+            x="time:T",
+            y="price:Q",
+            tooltip=["time:T", "price:Q"]
+        )
         .properties(height=400)
     )
 
-    st.subheader("📈 BTC Price Chart (24h)")
+    st.subheader("📈 BTC Price Chart (Last 24 Hours)")
     st.altair_chart(chart, use_container_width=True)
+
     st.caption(f"Last update: {df['time'].iloc[-1]}")
 
     if st.button("Logout"):
