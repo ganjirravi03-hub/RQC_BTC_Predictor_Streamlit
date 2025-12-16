@@ -1,5 +1,5 @@
 streamlit
+requests
+pandas
+altair
 bcrypt
-
-
-
