@@ -91,7 +91,7 @@ if os.path.exists(MODEL_PATH):
     with open(MODEL_PATH, "rb") as f:
         model = pickle.load(f)
 else:
-    model = None  # agar model nahi mila toh rule based dikhega
+    model = None
 
 def predict_btc(input_data):
     if model is None:
@@ -127,7 +127,6 @@ def dashboard():
     if not user["paid"]:
         st.warning("🔒 Premium feature locked")
         st.markdown("### 💳 Unlock Premium – ₹199")
-
         st.link_button("Pay with Razorpay", RAZORPAY_LINK)
 
         if st.button("✅ I have paid"):
@@ -138,15 +137,12 @@ def dashboard():
     else:
         st.success("✅ Premium Access Active")
 
-        # ---------- ML Prediction ----------
-        st.caption("Phase-2C ML Prediction (Enter last 5 BTC prices)")
-        btc_features = []
-        for i in range(5):
-            val = st.number_input(f"Previous BTC Price {i+1}", min_value=0.0, value=float(df['price'].iloc[-5+i]))
-            btc_features.append(val)
+        # ---------- AUTO ML PREDICTION ----------
+        # Automatically fetch last 5 BTC prices
+        last_5_prices = df['price'].iloc[-5:].tolist()
 
-        if st.button("Predict BTC Price"):
-            predicted_price = predict_btc(btc_features)
+        if st.button("Predict BTC Price (Auto)"):
+            predicted_price = predict_btc(last_5_prices)
             if predicted_price is not None:
                 st.metric("📈 Predicted BTC Price", f"${predicted_price:.2f}")
             else:
