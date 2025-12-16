@@ -10,6 +10,7 @@ from datetime import datetime
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
 USER_FILE = "users.json"
+RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"  # 👈 APNA LINK YAHAN DALO
 
 # ---------------- USER DB ----------------
 def load_users():
@@ -38,14 +39,12 @@ if "user" not in st.session_state:
 # ---------------- AUTH ----------------
 def auth_page():
     st.title("🔐 BTC Phoenix Secure Login")
-
     tab1, tab2 = st.tabs(["Login", "Register"])
     users = load_users()
 
     with tab1:
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
-
         if st.button("Login"):
             if email in users and check_password(password, users[email]["password"]):
                 st.session_state.logged_in = True
@@ -58,7 +57,6 @@ def auth_page():
     with tab2:
         r_email = st.text_input("Email", key="r_email")
         r_password = st.text_input("Password", type="password", key="r_pass")
-
         if st.button("Register"):
             if r_email in users:
                 st.warning("User already exists")
@@ -78,11 +76,9 @@ def get_btc_data():
     params = {"vs_currency": "usd", "days": 1}
     r = requests.get(url, params=params, timeout=10)
     data = r.json()
-
     prices = data.get("prices", [])
     if not prices:
         return pd.DataFrame()
-
     df = pd.DataFrame(prices, columns=["time", "price"])
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
@@ -90,51 +86,44 @@ def get_btc_data():
 # ---------------- DASHBOARD ----------------
 def dashboard():
     users = load_users()
-    user_data = users.get(st.session_state.user)
+    user = users[st.session_state.user]
 
     st.title("📊 BTC Phoenix Dashboard")
     st.caption(f"Welcome {st.session_state.user}")
 
     df = get_btc_data()
     if df.empty:
-        st.warning("⚠️ Live BTC data unavailable. Refresh again.")
+        st.warning("BTC data unavailable. Refresh.")
         st.stop()
 
-    latest_price = df["price"].iloc[-1]
+    st.metric("💰 BTC Price (USD)", f"${df['price'].iloc[-1]:,.2f}")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("💰 BTC Price (USD)", f"${latest_price:,.2f}")
-    col2.info("Source: CoinGecko (Live)")
-    col3.success("Status: Running")
-
-    chart = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(x="time:T", y="price:Q")
-        .properties(height=350)
-    )
+    chart = alt.Chart(df).mark_line().encode(
+        x="time:T", y="price:Q"
+    ).properties(height=350)
     st.altair_chart(chart, use_container_width=True)
 
     st.divider()
-
-    # ---------- PAID LOCK ----------
     st.subheader("🤖 BTC Prediction Panel")
 
-    if not user_data["paid"]:
-        st.warning("🔒 Prediction panel is locked (Paid Access)")
-        st.markdown("### 💳 Unlock for ₹199 (Demo)")
-        if st.button("Unlock Now (Demo Payment)"):
+    # ---------- PAID CHECK ----------
+    if not user["paid"]:
+        st.warning("🔒 Premium feature locked")
+        st.markdown("### 💳 Unlock Premium – ₹199")
+
+        st.link_button("Pay with Razorpay", RAZORPAY_LINK)
+
+        if st.button("✅ I have paid"):
             users[st.session_state.user]["paid"] = True
             save_users(users)
-            st.success("Payment successful! Prediction unlocked.")
+            st.success("Payment verified manually. Access granted.")
             st.rerun()
     else:
-        st.success("✅ Paid User – Prediction Access Granted")
+        st.success("✅ Premium Access Active")
         st.metric("📈 Next Hour Prediction", "UP ⬆️")
-        st.caption("Model: Phase-2A (Rule-Based – ML coming next)")
+        st.caption("Phase-2C (Rule based) | ML coming next")
 
     st.divider()
-
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.user = None
@@ -145,4 +134,3 @@ if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
-    
