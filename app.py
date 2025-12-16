@@ -21,7 +21,7 @@ def load_users():
 
 def save_users(users):
     with open(USER_FILE, "w") as f:
-        json.dump(users, f)
+        json.dump(users, f, indent=2)
 
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -47,7 +47,7 @@ def auth_page():
         password = st.text_input("Password", type="password")
 
         if st.button("Login"):
-            if email in users and check_password(password, users[email]):
+            if email in users and check_password(password, users[email]["password"]):
                 st.session_state.logged_in = True
                 st.session_state.user = email
                 st.success("Login successful")
@@ -63,98 +63,77 @@ def auth_page():
             if r_email in users:
                 st.warning("User already exists")
             else:
-                users[r_email] = hash_password(r_password)
+                users[r_email] = {
+                    "password": hash_password(r_password),
+                    "paid": False,
+                    "created": str(datetime.utcnow())
+                }
                 save_users(users)
                 st.success("Registration successful. Please login.")
 
-# ---------------- BTC DATA (LIVE + FALLBACK) ----------------
+# ---------------- BTC DATA ----------------
+@st.cache_data(ttl=60)
 def get_btc_data():
-    try:
-        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-        params = {"vs_currency": "usd", "days": 1, "interval": "minute"}
-        r = requests.get(url, params=params, timeout=10)
+    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    params = {"vs_currency": "usd", "days": 1}
+    r = requests.get(url, params=params, timeout=10)
+    data = r.json()
 
-        if r.status_code != 200:
-            raise Exception("API error")
+    prices = data.get("prices", [])
+    if not prices:
+        return pd.DataFrame()
 
-        data = r.json()
-        prices = data.get("prices", [])
-
-        if not prices:
-            raise Exception("Empty data")
-
-        df = pd.DataFrame(prices, columns=["time", "price"])
-        df["time"] = pd.to_datetime(df["time"], unit="ms")
-        df["source"] = "LIVE"
-        return df
-
-    except Exception:
-        # -------- FALLBACK DEMO DATA --------
-        times = pd.date_range(end=datetime.now(), periods=60, freq="min")
-        prices = [87000 + i * 2 for i in range(60)]
-
-        df = pd.DataFrame({
-            "time": times,
-            "price": prices,
-            "source": "DEMO"
-        })
-        return df
-
-# ---------------- SIMPLE PREDICTION ----------------
-def btc_prediction(df):
-    if len(df) < 10:
-        return "HOLD", "Low data"
-
-    diff = df["price"].iloc[-1] - df["price"].iloc[-10]
-
-    if diff > 0:
-        return "BUY", "Uptrend momentum"
-    elif diff < 0:
-        return "SELL", "Downtrend momentum"
-    else:
-        return "HOLD", "Sideways market"
+    df = pd.DataFrame(prices, columns=["time", "price"])
+    df["time"] = pd.to_datetime(df["time"], unit="ms")
+    return df
 
 # ---------------- DASHBOARD ----------------
 def dashboard():
+    users = load_users()
+    user_data = users.get(st.session_state.user)
+
     st.title("📊 BTC Phoenix Dashboard")
     st.caption(f"Welcome {st.session_state.user}")
 
     df = get_btc_data()
+    if df.empty:
+        st.warning("⚠️ Live BTC data unavailable. Refresh again.")
+        st.stop()
+
     latest_price = df["price"].iloc[-1]
-    source = df["source"].iloc[-1]
 
     col1, col2, col3 = st.columns(3)
+    col1.metric("💰 BTC Price (USD)", f"${latest_price:,.2f}")
+    col2.info("Source: CoinGecko (Live)")
+    col3.success("Status: Running")
 
-    with col1:
-        st.metric("💰 BTC Price (USD)", f"${latest_price:,.2f}")
-
-    with col2:
-        if source == "LIVE":
-            st.success("Source: CoinGecko (Live)")
-        else:
-            st.warning("Source: Demo / Fallback")
-
-    with col3:
-        signal, reason = btc_prediction(df)
-        if signal == "BUY":
-            st.success("🟢 BUY")
-        elif signal == "SELL":
-            st.error("🔴 SELL")
-        else:
-            st.warning("🟡 HOLD")
-
-    # -------- CHART --------
-    st.subheader("📈 BTC Price Chart (Last 24 Hours)")
     chart = (
         alt.Chart(df)
         .mark_line()
-        .encode(x="time:T", y="price:Q", tooltip=["price"])
-        .properties(height=400)
+        .encode(x="time:T", y="price:Q")
+        .properties(height=350)
     )
     st.altair_chart(chart, use_container_width=True)
 
-    st.caption(f"Last update: {df['time'].iloc[-1]}")
-    st.caption("⚠️ Educational purpose only. Not financial advice.")
+    st.divider()
+
+    # ---------- PAID LOCK ----------
+    st.subheader("🤖 BTC Prediction Panel")
+
+    if not user_data["paid"]:
+        st.warning("🔒 Prediction panel is locked (Paid Access)")
+        st.markdown("### 💳 Unlock for ₹199 (Demo)")
+        if st.button("Unlock Now (Demo Payment)"):
+            users[st.session_state.user]["paid"] = True
+            save_users(users)
+            st.success("Payment successful! Prediction unlocked.")
+            st.rerun()
+    else:
+        st.success("✅ Paid User – Prediction Access Granted")
+        st.metric("📈 Next Hour Prediction", "UP ⬆️")
+        st.caption("Model: Phase-2A (Rule-Based – ML coming next)")
+
+    st.divider()
 
     if st.button("Logout"):
         st.session_state.logged_in = False
@@ -166,4 +145,4 @@ if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
-                            
+    
