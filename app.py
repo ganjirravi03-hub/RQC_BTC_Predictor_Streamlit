@@ -3,58 +3,67 @@ import requests
 import pandas as pd
 import altair as alt
 import bcrypt
+import json
+import os
 
-# ---------------- PAGE CONFIG ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
+USER_FILE = "users.json"
 
-# ---------------- SESSION STATE ----------------
-if "users" not in st.session_state:
-    st.session_state.users = {}
+# ---------------- USER DB HELPERS ----------------
+def load_users():
+    if not os.path.exists(USER_FILE):
+        with open(USER_FILE, "w") as f:
+            json.dump({}, f)
+    with open(USER_FILE, "r") as f:
+        return json.load(f)
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+def save_users(users):
+    with open(USER_FILE, "w") as f:
+        json.dump(users, f)
 
-if "user" not in st.session_state:
-    st.session_state.user = None
-
-# ---------------- AUTH HELPERS ----------------
 def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 def check_password(password, hashed):
-    return bcrypt.checkpw(password.encode(), hashed)
+    return bcrypt.checkpw(password.encode(), hashed.encode())
+
+# ---------------- SESSION ----------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user" not in st.session_state:
+    st.session_state.user = None
 
 # ---------------- AUTH PAGE ----------------
 def auth_page():
     st.title("🔐 BTC Phoenix Secure Login")
 
     tab1, tab2 = st.tabs(["Login", "Register"])
+    users = load_users()
 
     with tab1:
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
 
         if st.button("Login"):
-            if email in st.session_state.users:
-                if check_password(password, st.session_state.users[email]):
-                    st.session_state.logged_in = True
-                    st.session_state.user = email
-                    st.success("Login successful")
-                    st.rerun()
-                else:
-                    st.error("Wrong password")
+            if email in users and check_password(password, users[email]):
+                st.session_state.logged_in = True
+                st.session_state.user = email
+                st.success("Login successful")
+                st.rerun()
             else:
-                st.error("User not found")
+                st.error("Invalid email or password")
 
     with tab2:
         r_email = st.text_input("Email", key="r_email")
         r_password = st.text_input("Password", type="password", key="r_pass")
 
         if st.button("Register"):
-            if r_email in st.session_state.users:
+            if r_email in users:
                 st.warning("User already exists")
             else:
-                st.session_state.users[r_email] = hash_password(r_password)
+                users[r_email] = hash_password(r_password)
+                save_users(users)
                 st.success("Registration successful. Please login.")
 
 # ---------------- BTC DATA ----------------
@@ -75,12 +84,11 @@ def get_btc_data():
 # ---------------- DASHBOARD ----------------
 def dashboard():
     st.title("📊 BTC Phoenix Dashboard")
-    st.caption("Live BTC price • Phase 1 (FINAL & STABLE)")
+    st.caption(f"Welcome {st.session_state.user}")
 
     df = get_btc_data()
-
     if df.empty or len(df) < 2:
-        st.warning("⚠️ Live BTC data temporarily unavailable. Please refresh.")
+        st.warning("⚠️ Live BTC data temporarily unavailable. Refresh again.")
         st.stop()
 
     latest_price = df["price"].iloc[-1]
@@ -89,30 +97,28 @@ def dashboard():
     with col1:
         st.metric("💰 BTC Price (USD)", f"${latest_price:,.2f}")
         st.success("Data Source: LIVE (CoinGecko)")
-
     with col2:
-        st.info("Next: Chart + ML prediction")
+        st.info("Next: ML Prediction + Paid Access")
 
     chart = (
         alt.Chart(df)
         .mark_line()
-        .encode(
-            x="time:T",
-            y="price:Q",
-            tooltip=["price"]
-        )
+        .encode(x="time:T", y="price:Q", tooltip=["price"])
         .properties(height=400)
     )
 
-    st.subheader("📈 BTC Price Chart (Last 24h)")
+    st.subheader("📈 BTC Price Chart (24h)")
     st.altair_chart(chart, use_container_width=True)
-
     st.caption(f"Last update: {df['time'].iloc[-1]}")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user = None
+        st.rerun()
 
 # ---------------- MAIN ----------------
 if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
-    
     
