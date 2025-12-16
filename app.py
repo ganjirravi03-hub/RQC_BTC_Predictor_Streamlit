@@ -12,7 +12,7 @@ import numpy as np
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
 USER_FILE = "users.json"
-RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"  # 👈 APNA LINK YAHAN DALO
+RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"  # 👈 Apna link yahan dalo
 
 # ---------------- USER DB ----------------
 def load_users():
@@ -159,4 +159,4 @@ if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
-            
+    
