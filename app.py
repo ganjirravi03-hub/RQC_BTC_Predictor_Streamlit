@@ -6,6 +6,8 @@ import bcrypt
 import json
 import os
 from datetime import datetime
+import pickle
+import numpy as np
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
@@ -83,6 +85,21 @@ def get_btc_data():
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
 
+# ---------------- ML MODEL LOAD ----------------
+MODEL_PATH = "models/btc_predictor.pkl"
+if os.path.exists(MODEL_PATH):
+    with open(MODEL_PATH, "rb") as f:
+        model = pickle.load(f)
+else:
+    model = None  # agar model nahi mila toh rule based dikhega
+
+def predict_btc(input_data):
+    if model is None:
+        return None
+    data_array = np.array(input_data).reshape(1, -1)
+    prediction = model.predict(data_array)
+    return float(prediction[0])
+
 # ---------------- DASHBOARD ----------------
 def dashboard():
     users = load_users()
@@ -120,8 +137,20 @@ def dashboard():
             st.rerun()
     else:
         st.success("✅ Premium Access Active")
-        st.metric("📈 Next Hour Prediction", "UP ⬆️")
-        st.caption("Phase-2C (Rule based) | ML coming next")
+
+        # ---------- ML Prediction ----------
+        st.caption("Phase-2C ML Prediction (Enter last 5 BTC prices)")
+        btc_features = []
+        for i in range(5):
+            val = st.number_input(f"Previous BTC Price {i+1}", min_value=0.0, value=float(df['price'].iloc[-5+i]))
+            btc_features.append(val)
+
+        if st.button("Predict BTC Price"):
+            predicted_price = predict_btc(btc_features)
+            if predicted_price is not None:
+                st.metric("📈 Predicted BTC Price", f"${predicted_price:.2f}")
+            else:
+                st.warning("ML model not loaded. Prediction unavailable.")
 
     st.divider()
     if st.button("Logout"):
@@ -134,3 +163,4 @@ if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
+    
