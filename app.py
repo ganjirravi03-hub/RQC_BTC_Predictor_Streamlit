@@ -9,6 +9,7 @@ from datetime import datetime
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
+
 USER_FILE = "users.json"
 RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"
 
@@ -30,33 +31,43 @@ def hash_password(password):
 def check_password(password, hashed):
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
-# ---------------- SESSION ----------------
+# ---------------- SESSION INIT ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ---------------- AUTH ----------------
+# ---------------- AUTH PAGE ----------------
 def auth_page():
     st.title("🔐 BTC Phoenix Secure Login")
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    users = load_users()
 
+    users = load_users()
+    tab1, tab2 = st.tabs(["Login", "Register"])
+
+    # -------- LOGIN --------
     with tab1:
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
+
         if st.button("Login"):
             if email in users and check_password(password, users[email]["password"]):
                 st.session_state.logged_in = True
                 st.session_state.user = email
+
+                # clear fields
+                st.session_state.login_email = ""
+                st.session_state.login_password = ""
+
                 st.success("Login successful")
                 st.rerun()
             else:
                 st.error("Invalid email or password")
 
+    # -------- REGISTER --------
     with tab2:
-        r_email = st.text_input("Email", key="r_email")
-        r_password = st.text_input("Password", type="password", key="r_pass")
+        r_email = st.text_input("Email", key="reg_email")
+        r_password = st.text_input("Password", type="password", key="reg_password")
+
         if st.button("Register"):
             if r_email in users:
                 st.warning("User already exists")
@@ -67,6 +78,11 @@ def auth_page():
                     "created": str(datetime.utcnow())
                 }
                 save_users(users)
+
+                # clear fields
+                st.session_state.reg_email = ""
+                st.session_state.reg_password = ""
+
                 st.success("Registration successful. Please login.")
 
 # ---------------- BTC DATA ----------------
@@ -76,9 +92,11 @@ def get_btc_data():
     params = {"vs_currency": "usd", "days": 1}
     r = requests.get(url, params=params, timeout=10)
     data = r.json()
+
     prices = data.get("prices", [])
     if not prices:
         return pd.DataFrame()
+
     df = pd.DataFrame(prices, columns=["time", "price"])
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
@@ -88,12 +106,9 @@ def rule_based_prediction(prices):
     if len(prices) < 10:
         return "⚖️ SIDEWAYS"
 
-    first = prices[0]
-    last = prices[-1]
-
-    if last > first:
+    if prices[-1] > prices[0]:
         return "📈 UP ⬆️ (Bullish)"
-    elif last < first:
+    elif prices[-1] < prices[0]:
         return "📉 DOWN ⬇️ (Bearish)"
     else:
         return "⚖️ SIDEWAYS"
@@ -108,7 +123,7 @@ def dashboard():
 
     df = get_btc_data()
     if df.empty:
-        st.warning("BTC data unavailable. Refresh.")
+        st.warning("BTC data unavailable. Please refresh.")
         st.stop()
 
     st.metric("💰 BTC Price (USD)", f"${df['price'].iloc[-1]:,.2f}")
@@ -118,7 +133,7 @@ def dashboard():
         y="price:Q"
     ).properties(height=350)
 
-    st.altair_chart(chart, width="stretch")
+    st.altair_chart(chart, use_container_width=True)
 
     st.divider()
     st.subheader("🤖 BTC Prediction Panel")
@@ -135,10 +150,8 @@ def dashboard():
             st.rerun()
     else:
         st.success("✅ Premium Access Active")
-
         last_prices = df["price"].iloc[-10:].tolist()
         signal = rule_based_prediction(last_prices)
-
         st.metric("📊 Market Signal", signal)
         st.caption("Rule-Based Smart Analysis | ML Upgrade Coming")
 
