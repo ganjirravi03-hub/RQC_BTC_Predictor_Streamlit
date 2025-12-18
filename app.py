@@ -34,6 +34,7 @@ def check_password(password, hashed):
 # ---------------- SESSION INIT ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+
 if "user" not in st.session_state:
     st.session_state.user = None
 
@@ -44,7 +45,7 @@ def auth_page():
     users = load_users()
     tab1, tab2 = st.tabs(["Login", "Register"])
 
-    # -------- LOGIN --------
+    # ---------- LOGIN ----------
     with tab1:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
@@ -53,17 +54,12 @@ def auth_page():
             if email in users and check_password(password, users[email]["password"]):
                 st.session_state.logged_in = True
                 st.session_state.user = email
-
-                # clear fields
-                st.session_state.login_email = ""
-                st.session_state.login_password = ""
-
                 st.success("Login successful")
                 st.rerun()
             else:
                 st.error("Invalid email or password")
 
-    # -------- REGISTER --------
+    # ---------- REGISTER ----------
     with tab2:
         r_email = st.text_input("Email", key="reg_email")
         r_password = st.text_input("Password", type="password", key="reg_password")
@@ -78,11 +74,6 @@ def auth_page():
                     "created": str(datetime.utcnow())
                 }
                 save_users(users)
-
-                # clear fields
-                st.session_state.reg_email = ""
-                st.session_state.reg_password = ""
-
                 st.success("Registration successful. Please login.")
 
 # ---------------- BTC DATA ----------------
@@ -142,12 +133,6 @@ def dashboard():
         st.warning("🔒 Premium feature locked")
         st.markdown("### 💳 Unlock Premium – ₹199")
         st.link_button("Pay with Razorpay", RAZORPAY_LINK)
-
-        if st.button("✅ I have paid"):
-            users[st.session_state.user]["paid"] = True
-            save_users(users)
-            st.success("Payment verified. Access granted.")
-            st.rerun()
     else:
         st.success("✅ Premium Access Active")
         last_prices = df["price"].iloc[-10:].tolist()
