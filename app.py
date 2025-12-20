@@ -5,15 +5,15 @@ import altair as alt
 import bcrypt
 import json
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 
-# ---------------- CONFIG ----------------
+# ================== CONFIG ==================
 st.set_page_config(page_title="BTC Phoenix", layout="wide")
 
 USER_FILE = "users.json"
 RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"
 
-# ---------------- USER DB ----------------
+# ================== USER DB ==================
 def load_users():
     if not os.path.exists(USER_FILE):
         with open(USER_FILE, "w") as f:
@@ -25,58 +25,62 @@ def save_users(users):
     with open(USER_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
-def hash_password(password):
+def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-def check_password(password, hashed):
+def check_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
-# ---------------- SESSION INIT ----------------
+# ================== SESSION INIT ==================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ---------------- AUTH PAGE ----------------
+# ================== AUTH PAGE ==================
 def auth_page():
     st.title("🔐 BTC Phoenix Secure Login")
 
     users = load_users()
-    tab1, tab2 = st.tabs(["Login", "Register"])
+    tab_login, tab_register = st.tabs(["Login", "Register"])
 
     # ---------- LOGIN ----------
-    with tab1:
+    with tab_login:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        if st.button("Login"):
+        if st.button("Login", key="login_btn"):
             if email in users and check_password(password, users[email]["password"]):
                 st.session_state.logged_in = True
                 st.session_state.user = email
-                st.success("Login successful")
+                st.success("✅ Login successful")
                 st.rerun()
             else:
-                st.error("Invalid email or password")
+                st.error("❌ Invalid email or password")
 
     # ---------- REGISTER ----------
-    with tab2:
+    with tab_register:
         r_email = st.text_input("Email", key="reg_email")
         r_password = st.text_input("Password", type="password", key="reg_password")
 
-        if st.button("Register"):
+        if st.button("Register", key="register_btn"):
+            if not r_email or not r_password:
+                st.warning("⚠️ Email & Password required")
+                return
+
             if r_email in users:
-                st.warning("User already exists")
+                st.warning("⚠️ User already exists")
             else:
                 users[r_email] = {
                     "password": hash_password(r_password),
                     "paid": False,
-                    "created": str(datetime.utcnow())
+                    "created": str(datetime.now(UTC))
                 }
                 save_users(users)
-                st.success("Registration successful. Please login.")
+                st.success("✅ Registration successful. Please login.")
 
-# ---------------- BTC DATA ----------------
+# ================== BTC DATA ==================
 @st.cache_data(ttl=60)
 def get_btc_data():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
@@ -92,7 +96,7 @@ def get_btc_data():
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
 
-# ---------------- RULE BASED PREDICTION ----------------
+# ================== RULE BASED PREDICTION ==================
 def rule_based_prediction(prices):
     if len(prices) < 10:
         return "⚖️ SIDEWAYS"
@@ -104,17 +108,23 @@ def rule_based_prediction(prices):
     else:
         return "⚖️ SIDEWAYS"
 
-# ---------------- DASHBOARD ----------------
+# ================== DASHBOARD ==================
 def dashboard():
     users = load_users()
+
+    if st.session_state.user not in users:
+        st.session_state.logged_in = False
+        st.session_state.user = None
+        st.rerun()
+
     user = users[st.session_state.user]
 
     st.title("📊 BTC Phoenix Dashboard")
-    st.caption(f"Welcome {st.session_state.user}")
+    st.caption(f"Welcome, {st.session_state.user}")
 
     df = get_btc_data()
     if df.empty:
-        st.warning("BTC data unavailable. Please refresh.")
+        st.warning("⚠️ BTC data unavailable. Please refresh.")
         st.stop()
 
     st.metric("💰 BTC Price (USD)", f"${df['price'].iloc[-1]:,.2f}")
@@ -146,9 +156,9 @@ def dashboard():
         st.session_state.user = None
         st.rerun()
 
-# ---------------- MAIN ----------------
+# ================== MAIN ==================
 if not st.session_state.logged_in:
     auth_page()
 else:
     dashboard()
-    
+                
