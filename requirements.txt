@@ -2,5 +2,5 @@ streamlit
 requests
 pandas
 altair
-bcrypt
-
+firebase-admin
+yfinance
