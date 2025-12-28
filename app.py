@@ -1,128 +1,118 @@
 import streamlit as st
-import requests
 import pandas as pd
-import altair as alt
+import numpy as np
+import yfinance as yf
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 from datetime import datetime
 
-# ================= CONFIG =================
-st.set_page_config(
-    page_title="BTC Phoenix",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+# ---------------- CONFIG ----------------
+APP_NAME = "BTC Phoenix"
+PREMIUM_PRICE = 199
 
-RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"
-
-# ================= FIREBASE INIT =================
-# ⛔ serviceAccountKey.json file same folder me honi chahiye
+# ---------------- FIREBASE INIT ----------------
 if not firebase_admin._apps:
-    cred = credentials.Certificate("serviceAccountKey.json")
-    firebase_admin.initialize_app(cred)
+    firebase_admin.initialize_app(
+        credentials.Certificate(dict(st.secrets["firebase"]))
+    )
 
 db = firestore.client()
 
-# ================= SESSION =================
+# ---------------- UI ----------------
+st.set_page_config(page_title=APP_NAME, page_icon="🔥", layout="centered")
+st.title("🔥 BTC Phoenix – AI Bitcoin Predictor")
+
+# ---------------- AUTH ----------------
+st.subheader("🔐 Login")
+
+email = st.text_input("Email")
+password = st.text_input("Password", type="password")
+
+if st.button("Login"):
+    try:
+        user = auth.get_user_by_email(email)
+        st.session_state["user"] = email
+        st.success("Login successful")
+    except:
+        st.error("User not found")
+
 if "user" not in st.session_state:
-    st.session_state.user = None
+    st.stop()
 
-# ================= BTC DATA =================
-@st.cache_data(ttl=60)
-def get_btc_data():
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency": "usd", "days": 1}
-    r = requests.get(url, params=params, timeout=10)
-    data = r.json().get("prices", [])
-    df = pd.DataFrame(data, columns=["time", "price"])
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
-    return df
+# ---------------- USER DATA ----------------
+user_ref = db.collection("users").document(st.session_state["user"])
+user_doc = user_ref.get()
 
-# ================= AUTH PAGE =================
-def auth_page():
-    st.title("🔐 BTC Phoenix Login / Register")
+if not user_doc.exists:
+    user_ref.set({
+        "email": st.session_state["user"],
+        "paid": False,
+        "amount": 0,
+        "created": datetime.now()
+    })
 
-    tab1, tab2 = st.tabs(["Login", "Register"])
+user_data = user_ref.get().to_dict()
 
-    # ---------- LOGIN ----------
-    with tab1:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pass")
+# ---------------- BTC DATA ----------------
+st.subheader("📊 Live Bitcoin Data")
 
-        if st.button("Login"):
-            try:
-                auth.get_user_by_email(email)
-                st.session_state.user = email
-                st.success("✅ Login Successful")
-                st.rerun()
-            except:
-                st.error("❌ User not found")
+btc = yf.download("BTC-USD", period="7d", interval="1h")
+st.line_chart(btc["Close"])
 
-    # ---------- REGISTER ----------
-    with tab2:
-        r_email = st.text_input("New Email", key="reg_email")
-        r_pass = st.text_input("New Password", type="password", key="reg_pass")
+last_prices = btc["Close"].tail(60).values
 
-        if st.button("Create Account"):
-            try:
-                auth.create_user(email=r_email, password=r_pass)
-                db.collection("users").document(r_email).set({
-                    "paid": False,
-                    "created": datetime.utcnow()
-                })
-                st.success("✅ Account Created. Login Now.")
-            except Exception as e:
-                st.error("❌ Error creating account")
-
-# ================= DASHBOARD =================
-def dashboard():
-    st.title("📊 BTC Phoenix Dashboard")
-    st.caption(f"👤 {st.session_state.user}")
-
-    user_doc = db.collection("users").document(st.session_state.user).get()
-    paid = user_doc.to_dict().get("paid", False)
-
-    df = get_btc_data()
-
-    if df.empty:
-        st.error("BTC data not available")
-        return
-
-    st.metric(
-        "💰 BTC Price (USD)",
-        f"${df['price'].iloc[-1]:,.2f}"
-    )
-
-    chart = alt.Chart(df).mark_line().encode(
-        x="time:T",
-        y="price:Q"
-    ).properties(height=350)
-
-    st.altair_chart(chart, use_container_width=True)
-
-    st.divider()
-    st.subheader("🤖 Prediction Panel")
-
-    if not paid:
-        st.warning("🔒 Premium Locked")
-        st.markdown("### 💳 Unlock Premium – ₹199")
-        st.link_button("Pay with Razorpay", RAZORPAY_LINK)
-        st.caption("Payment ke baad auto unlock ho jayega")
+# ---------------- AI / ML SIGNAL ----------------
+def ai_signal(prices):
+    diff = np.mean(np.diff(prices))
+    if diff > 0:
+        return "📈 BUY"
+    elif diff < 0:
+        return "📉 SELL"
     else:
-        st.success("✅ Premium Active")
-        signal = "📈 UP ⬆️" if df["price"].iloc[-1] > df["price"].iloc[0] else "📉 DOWN ⬇️"
-        st.metric("Market Signal", signal)
-        st.caption("AI Engine Coming Soon")
+        return "⚖️ HOLD"
 
-    st.divider()
+signal = ai_signal(last_prices)
 
-    if st.button("Logout"):
-        st.session_state.user = None
-        st.rerun()
+st.subheader("🤖 AI Market Signal")
+st.markdown(f"## {signal}")
 
-# ================= MAIN =================
-if st.session_state.user is None:
-    auth_page()
+# ---------------- PREMIUM LOGIC ----------------
+if user_data["paid"]:
+    st.success("💎 Premium User")
+    st.markdown("### 🔮 Advanced AI Prediction Enabled")
 else:
-    dashboard()
-    
+    st.warning("🔒 Premium Locked")
+
+    if st.button("Unlock Premium ₹199"):
+        # Razorpay webhook will update this in real use
+        user_ref.update({
+            "paid": True,
+            "amount": PREMIUM_PRICE,
+            "paid_at": datetime.now()
+        })
+        st.success("Premium Activated (Demo Auto-Verify)")
+        st.experimental_rerun()
+
+# ---------------- ADMIN DASHBOARD ----------------
+st.divider()
+st.subheader("📊 Admin Dashboard")
+
+if st.session_state["user"] == "admin@gmail.com":
+    users = db.collection("users").stream()
+    total_users = 0
+    paid_users = 0
+    revenue = 0
+
+    for u in users:
+        total_users += 1
+        d = u.to_dict()
+        if d.get("paid"):
+            paid_users += 1
+            revenue += d.get("amount", 0)
+
+    st.metric("👥 Total Users", total_users)
+    st.metric("💎 Premium Users", paid_users)
+    st.metric("💰 Revenue (₹)", revenue)
+
+st.divider()
+st.caption("⚠️ Educational purpose only. Not financial advice.")
