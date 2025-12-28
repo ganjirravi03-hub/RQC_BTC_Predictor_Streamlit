@@ -2,132 +2,96 @@ import streamlit as st
 import requests
 import pandas as pd
 import altair as alt
-import bcrypt
-import json
-import os
-from datetime import datetime, UTC
+import firebase_admin
+from firebase_admin import credentials, auth, firestore
+from datetime import datetime
 
-# ================== CONFIG ==================
-st.set_page_config(page_title="BTC Phoenix", layout="wide")
+# ================= CONFIG =================
+st.set_page_config(
+    page_title="BTC Phoenix",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-USER_FILE = "users.json"
 RAZORPAY_LINK = "https://rzp.io/l/btcphoenix199"
 
-# ================== USER DB ==================
-def load_users():
-    if not os.path.exists(USER_FILE):
-        with open(USER_FILE, "w") as f:
-            json.dump({}, f)
-    with open(USER_FILE, "r") as f:
-        return json.load(f)
+# ================= FIREBASE INIT =================
+# ⛔ serviceAccountKey.json file same folder me honi chahiye
+if not firebase_admin._apps:
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
 
-def save_users(users):
-    with open(USER_FILE, "w") as f:
-        json.dump(users, f, indent=2)
+db = firestore.client()
 
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-def check_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
-
-# ================== SESSION INIT ==================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
+# ================= SESSION =================
 if "user" not in st.session_state:
     st.session_state.user = None
 
-# ================== AUTH PAGE ==================
-def auth_page():
-    st.title("🔐 BTC Phoenix Secure Login")
-
-    users = load_users()
-    tab_login, tab_register = st.tabs(["Login", "Register"])
-
-    # ---------- LOGIN ----------
-    with tab_login:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
-
-        if st.button("Login", key="login_btn"):
-            if email in users and check_password(password, users[email]["password"]):
-                st.session_state.logged_in = True
-                st.session_state.user = email
-                st.success("✅ Login successful")
-                st.rerun()
-            else:
-                st.error("❌ Invalid email or password")
-
-    # ---------- REGISTER ----------
-    with tab_register:
-        r_email = st.text_input("Email", key="reg_email")
-        r_password = st.text_input("Password", type="password", key="reg_password")
-
-        if st.button("Register", key="register_btn"):
-            if not r_email or not r_password:
-                st.warning("⚠️ Email & Password required")
-                return
-
-            if r_email in users:
-                st.warning("⚠️ User already exists")
-            else:
-                users[r_email] = {
-                    "password": hash_password(r_password),
-                    "paid": False,
-                    "created": str(datetime.now(UTC))
-                }
-                save_users(users)
-                st.success("✅ Registration successful. Please login.")
-
-# ================== BTC DATA ==================
+# ================= BTC DATA =================
 @st.cache_data(ttl=60)
 def get_btc_data():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
     params = {"vs_currency": "usd", "days": 1}
     r = requests.get(url, params=params, timeout=10)
-    data = r.json()
-
-    prices = data.get("prices", [])
-    if not prices:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(prices, columns=["time", "price"])
+    data = r.json().get("prices", [])
+    df = pd.DataFrame(data, columns=["time", "price"])
     df["time"] = pd.to_datetime(df["time"], unit="ms")
     return df
 
-# ================== RULE BASED PREDICTION ==================
-def rule_based_prediction(prices):
-    if len(prices) < 10:
-        return "⚖️ SIDEWAYS"
+# ================= AUTH PAGE =================
+def auth_page():
+    st.title("🔐 BTC Phoenix Login / Register")
 
-    if prices[-1] > prices[0]:
-        return "📈 UP ⬆️ (Bullish)"
-    elif prices[-1] < prices[0]:
-        return "📉 DOWN ⬇️ (Bearish)"
-    else:
-        return "⚖️ SIDEWAYS"
+    tab1, tab2 = st.tabs(["Login", "Register"])
 
-# ================== DASHBOARD ==================
+    # ---------- LOGIN ----------
+    with tab1:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_pass")
+
+        if st.button("Login"):
+            try:
+                auth.get_user_by_email(email)
+                st.session_state.user = email
+                st.success("✅ Login Successful")
+                st.rerun()
+            except:
+                st.error("❌ User not found")
+
+    # ---------- REGISTER ----------
+    with tab2:
+        r_email = st.text_input("New Email", key="reg_email")
+        r_pass = st.text_input("New Password", type="password", key="reg_pass")
+
+        if st.button("Create Account"):
+            try:
+                auth.create_user(email=r_email, password=r_pass)
+                db.collection("users").document(r_email).set({
+                    "paid": False,
+                    "created": datetime.utcnow()
+                })
+                st.success("✅ Account Created. Login Now.")
+            except Exception as e:
+                st.error("❌ Error creating account")
+
+# ================= DASHBOARD =================
 def dashboard():
-    users = load_users()
-
-    if st.session_state.user not in users:
-        st.session_state.logged_in = False
-        st.session_state.user = None
-        st.rerun()
-
-    user = users[st.session_state.user]
-
     st.title("📊 BTC Phoenix Dashboard")
-    st.caption(f"Welcome, {st.session_state.user}")
+    st.caption(f"👤 {st.session_state.user}")
+
+    user_doc = db.collection("users").document(st.session_state.user).get()
+    paid = user_doc.to_dict().get("paid", False)
 
     df = get_btc_data()
-    if df.empty:
-        st.warning("⚠️ BTC data unavailable. Please refresh.")
-        st.stop()
 
-    st.metric("💰 BTC Price (USD)", f"${df['price'].iloc[-1]:,.2f}")
+    if df.empty:
+        st.error("BTC data not available")
+        return
+
+    st.metric(
+        "💰 BTC Price (USD)",
+        f"${df['price'].iloc[-1]:,.2f}"
+    )
 
     chart = alt.Chart(df).mark_line().encode(
         x="time:T",
@@ -137,28 +101,28 @@ def dashboard():
     st.altair_chart(chart, use_container_width=True)
 
     st.divider()
-    st.subheader("🤖 BTC Prediction Panel")
+    st.subheader("🤖 Prediction Panel")
 
-    if not user["paid"]:
-        st.warning("🔒 Premium feature locked")
+    if not paid:
+        st.warning("🔒 Premium Locked")
         st.markdown("### 💳 Unlock Premium – ₹199")
         st.link_button("Pay with Razorpay", RAZORPAY_LINK)
+        st.caption("Payment ke baad auto unlock ho jayega")
     else:
-        st.success("✅ Premium Access Active")
-        last_prices = df["price"].iloc[-10:].tolist()
-        signal = rule_based_prediction(last_prices)
-        st.metric("📊 Market Signal", signal)
-        st.caption("Rule-Based Smart Analysis | ML Upgrade Coming")
+        st.success("✅ Premium Active")
+        signal = "📈 UP ⬆️" if df["price"].iloc[-1] > df["price"].iloc[0] else "📉 DOWN ⬇️"
+        st.metric("Market Signal", signal)
+        st.caption("AI Engine Coming Soon")
 
     st.divider()
+
     if st.button("Logout"):
-        st.session_state.logged_in = False
         st.session_state.user = None
         st.rerun()
 
-# ================== MAIN ==================
-if not st.session_state.logged_in:
+# ================= MAIN =================
+if st.session_state.user is None:
     auth_page()
 else:
     dashboard()
-                
+    
